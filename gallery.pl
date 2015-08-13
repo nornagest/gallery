@@ -6,14 +6,19 @@ use Mojo::Log;
 
 our $VERSION = "1.2";
 
+# Documentation browser under "/perldoc"
+plugin 'PODRenderer' => { name => 'pod' };
+
+get '/pod';
+
 # load a config file that contains the apps
 # configuration parameters
 my $config = plugin 'Config';
 
 # hypnotoad server configuration
-app->config (
+app->config(
     hypnotoad => {
-        listen             => [$config->{ip_address_port}],
+        listen             => [ $config->{ip_address_port} ],
         pid_file           => $config->{pid_file},
         heartbeat_timeout  => $config->{heartbeat_timeout},
         heartbeat_interval => $config->{heartbeat_interval},
@@ -26,124 +31,134 @@ app->config (
 my $log_dir = $config->{log_dir};
 
 # if the log directory does not exist then create it
-if ( ! -d $log_dir ) {
-  print "Creating $log_dir directory\n";
-  mkdir $log_dir, 0755 or die "Cannot create $log_dir: $!\n";
+if ( !-d $log_dir ) {
+    print "Creating $log_dir directory\n";
+    mkdir $log_dir, 0755 or die "Cannot create $log_dir: $!\n";
 }
 
 # setup Mojo logging to use the log directory we just created
 # default the log level to info
-my $log = Mojo::Log->new (path => "$log_dir/$config->{log_file}", level => $config->{log_level});
+my $log = Mojo::Log->new(
+    path  => "$log_dir/$config->{log_file}",
+    level => $config->{log_level}
+);
 
 # render the hand created html file in the public directory
-get '/' => sub {
-  my $self = shift;
-  
-  my $remote_addr = $self->tx->remote_address;
-  my $ua          = $self->req->headers->user_agent;
-  my $path        = $self->req->url->to_abs->path;
-  my $method      = $self->req->method;
-  $log->info("$remote_addr $method $path $ua");
+#get '/' => sub {
+#my $self = shift;
 
-  $self->reply->static('index.html');
-};
+#my $remote_addr = $self->tx->remote_address;
+#my $ua          = $self->req->headers->user_agent;
+#my $path        = $self->req->url->to_abs->path;
+#my $method      = $self->req->method;
+#$log->info("$remote_addr $method $path $ua");
+
+#$self->reply->static('index.html');
+#};
 
 # if you want to have the script auto generate the directories in public
 # then uncomment this get block and comment out the get block above
- # get '/' => sub {
-  # my $self = shift;
-  # my @gallery_dirs;
-  
-  # if ( $#gallery_dirs <= 0 ) {  
-    # opendir(my $dh, "public/") or $log->info("can't opendir public: $!");
-    # @gallery_dirs = sort { $a cmp $b } grep { ! /^\./ && -d "public/$_" } readdir($dh);
-    # closedir $dh;
-  # }
-  
-  # $self->stash ( gal_dirs => \@gallery_dirs );
-  
-  # my $remote_addr = $self->tx->remote_address;
-  # my $ua          = $self->req->headers->user_agent;
-  # my $path        = $self->req->url->to_abs->path;
-  # my $method      = $self->req->method;
-  # $log->info("$remote_addr $method $path $ua");
-  
-  # $self->reply->static('index.html');
+get '/' => sub {
+    my $self = shift;
+    my @gallery_dirs;
 
-# };
+    if ( $#gallery_dirs <= 0 ) {
+        opendir( my $dh, "public/" ) or $log->info("can't opendir public: $!");
+        @gallery_dirs =
+          sort { $a cmp $b } grep { !/^\./ && -d "public/$_" } readdir($dh);
+        closedir $dh;
+    }
+
+    $self->stash( gal_dirs => \@gallery_dirs );
+
+    my $remote_addr = $self->tx->remote_address;
+    my $ua          = $self->req->headers->user_agent;
+    my $path        = $self->req->url->to_abs->path;
+    my $method      = $self->req->method;
+    $log->info("$remote_addr $method $path $ua");
+
+    #$self->reply->static('index.html');
+
+} => 'index';
 
 # this block does the work of building the viewing of the gallery
 # start is the first part of an array slice to view chunks of images
 # at a time rather than all on one page
 get '/:dir/:start' => { start => 0 } => sub {
-  my $self        = shift;
-  my $directory   = $self->param('dir');
-  my $slice_start = $self->param('start');
+    my $self        = shift;
+    my $directory   = $self->param('dir');
+    my $slice_start = $self->param('start');
 
-  # how many images should be shown on a page
-  # we want 15 at a time  
-  my $slice_end   = $slice_start + 14;
-  my $prev_slice;
-  my $next_slice;
-  my $title;
-  my @pics;
+    # how many images should be shown on a page
+    # we want 30 at a time
+    my $slice_end = $slice_start + 29;
+    my $prev_slice;
+    my $next_slice;
+    my $title;
+    my @pics;
 
-  my $remote_addr = $self->tx->remote_address;
-  my $ua          = $self->req->headers->user_agent;
-  my $path        = $self->req->url->to_abs->path;
-  my $method      = $self->req->method;  
-  $log->info("$remote_addr $method $path $ua");
-  
-  # only build the thumbnail image array once
-  if ( $#pics <= 0 ) {
-    @pics = map { s/public//r }
-            grep { /\.[Jj][Pp][Ee][Gg]$|\.[Jj][Pp][Gg]$|\.[Pp][Nn][Gg]$|\.[Gg][Ii][Ff]$/ }
-            glob "public/$directory/thumbs/*";
-    
-    # if there are no thumbnails then build the images from the directory you chose
+    my $remote_addr = $self->tx->remote_address;
+    my $ua          = $self->req->headers->user_agent;
+    my $path        = $self->req->url->to_abs->path;
+    my $method      = $self->req->method;
+    $log->info("$remote_addr $method $path $ua");
+
+    # only build the thumbnail image array once
     if ( $#pics <= 0 ) {
-      @pics = map { s/public//r }
-              grep { /\.[Jj][Pp][Ee][Gg]$|\.[Jj][Pp][Gg]$|\.[Pp][Nn][Gg]$|\.[Gg][Ii][Ff]$/ }
-              glob "public/$directory/*";
-    }
-    
-    # get the title of the gallery from the .title file
-    open my $ifh, "<", "public/$directory/.title" or $log->info("could not open (public/$directory/.title): $!");
-    while ( <$ifh> ) {
-      $title .= $_;
-    }
-    close $ifh;
-    
-  }
-  
-  # in order to show the next and previous page links correctly
-  # we need to know the previous slice from the current number
-  # we are on
-  $prev_slice = $slice_start - 15;
-  
-  if ( $prev_slice < 0 ) {
-    $prev_slice = 0;
-  }
-  
-  if ( $slice_end > $#pics ) {
-    $slice_end  = $#pics;
-    $next_slice = $#pics;
-  }
-  else {
-    $next_slice  = $slice_end + 1;    
-  }
-  
-  # grab only what we need from the entire list of images
-  my @send_pics = @pics[$slice_start .. $slice_end];
+        @pics = map { s/public//r }
+          grep {
+/\.[Jj][Pp][Ee][Gg]$|\.[Jj][Pp][Gg]$|\.[Pp][Nn][Gg]$|\.[Gg][Ii][Ff]$/
+          } glob "public/$directory/thumbs/*";
 
-  $self->stash( gallery => \@send_pics );
-  $self->stash( prev    => $prev_slice );
-  $self->stash( next    => $next_slice );
-  $self->stash( dir     => $directory );
-  $self->stash( header  => $title );
-  $self->stash( end     => $#pics );
-  
-  $self->render('gallery');
+ # if there are no thumbnails then build the images from the directory you chose
+        if ( $#pics <= 0 ) {
+            @pics = map { s/public//r }
+              grep {
+/\.[Jj][Pp][Ee][Gg]$|\.[Jj][Pp][Gg]$|\.[Pp][Nn][Gg]$|\.[Gg][Ii][Ff]$/
+              } glob "public/$directory/*";
+        }
+
+        # get the title of the gallery from the .title file
+        if ( open my $ifh, "<", "public/$directory/.title" ) {
+            while (<$ifh>) {
+                $title .= $_;
+            }
+            close $ifh;
+        }
+        else {
+            $log->info("could not open (public/$directory/.title): $!");
+        }
+
+    }
+
+    # in order to show the next and previous page links correctly
+    # we need to know the previous slice from the current number
+    # we are on
+    $prev_slice = $slice_start - 30;
+
+    if ( $prev_slice < 0 ) {
+        $prev_slice = 0;
+    }
+
+    if ( $slice_end > $#pics ) {
+        $slice_end  = $#pics;
+        $next_slice = $#pics;
+    }
+    else {
+        $next_slice = $slice_end + 1;
+    }
+
+    # grab only what we need from the entire list of images
+    my @send_pics = @pics[ $slice_start .. $slice_end ];
+
+    $self->stash( gallery => \@send_pics );
+    $self->stash( prev    => $prev_slice );
+    $self->stash( next    => $next_slice );
+    $self->stash( dir     => $directory );
+    $self->stash( header  => $title );
+    $self->stash( end     => $#pics );
+
+    $self->render('gallery');
 };
 
 app->start;
@@ -169,7 +184,7 @@ View the following galleries
     <%= content %>
     <p />
     % foreach my $dir ( @$gal_dirs ) {
-    <a href='/<%= $dir %>/0'><%= $dir %></a> <br>
+      <%= link_to $dir  => "/$dir/0" %> <br>
     % }
   </body>
 </html>
@@ -181,15 +196,18 @@ View the following galleries
   <title><%= title %></title>
 
   <style type="text/css">
-    body {
-      color: white;
-      background: #336699;
+    .thumbs {
+      margin-left: 5px;
+      margin-right:5px;
+      float:top;
     }
     
-    .thumbs {
-      margin-left: 10px;
-      margin-right: 5px;
-      float:left;
+    .thumb {
+      max-height: 90px;
+      min-width: 90px;
+      padding-left: 5px;
+      padding-right:5px;
+      float: left;
     }
     
     .viewer {
@@ -207,32 +225,15 @@ View the following galleries
     }
     
     .next {
-      float: left;
+      float: right;
       padding-left: 20px;
     }
 
     .right {
       float: right;
     }
-    
-    A:link {
-      color: white;
-      background-color: #336699;
-    }
-
-    A:active {
-       color: white;
-       background-color: #336699;
-    }
-
-    A:hover {
-       color: yellow;
-       background-color: #336699;
-    }
-
-    A:visited {
-       color: lime;
-       background-color: #336699;
+    .left {
+      float: left;
     }
   </style>
 
@@ -247,71 +248,62 @@ View the following galleries
   <body>
   
     <b><%= $header %></b>
-  
     <p />    
   
     <div class="thumbs">
       % my $counter = 0;
       % my $show_pic;
       % my $med_pic;
+      % my $orig_pic;
       % my $download_pic;
       % my $viewer_pic;
       
       % foreach my $img ( @$gallery ) {
-        
         % $show_pic = $img;
         % $show_pic =~ s/\/thumbs//g;
         % $show_pic =~ s/thumb_//;
+        % $med_pic = $show_pic;
+        % $orig_pic = $show_pic;
+        % $orig_pic =~ s/($dir)/$1\/originals/;
 
         % if ( $counter == 0 ) {
         %  $viewer_pic = $show_pic;
+        %  $download_pic = $orig_pic
         % }
-        
-        % $med_pic = $show_pic;
-        <!-- % $med_pic =~ s/$dir//g; -->
-        <!-- % $med_pic =~ s/\///g; -->
-        
-        % $download_pic = $show_pic;
-        % $download_pic =~ s/($dir)/$1\/originals/;
-        
-        <a href='#' onclick="show_img('<%= $med_pic %>','<%= $download_pic %>');return false;"><img src='<%= $img %>' /></a>
+
+        % my $js_code = "show_img('$med_pic','$orig_pic');return false;";
+        % my $image_link = image($img);
+        % my $link_tag = link_to('XXX' => '#', onclick => $js_code);
+        % $link_tag =~ s/XXX/$image_link/;
+        <div id='x' class='thumb'>
+          <%== $link_tag %> 
+        </div>
         % $counter++;
         
-        % if ( ( $counter % 3 ) == 0 ) {
+        % if ( ( $counter % 15 ) == 0 ) {
           <div class="clear"></div>
         % }
-       
       % }
     </div>
      
-    <div class="viewer">
-      <img src='<%= $viewer_pic %>' id='view_pic' />
-      <p />
-
-      % if ( $next > 15 ) {
-      <a class="prev" href='/<%= $dir %>/<%= $prev %>'>Prev</a>
-      % }
-      
-      % if ( $next < $end ) {
-      <a class="next" href='/<%= $dir %>/<%= $next %>'>Next</a>
-      % }
-      <a class="right" href='<%= $download_pic %>' id="download">Download original</a>
-
-    </div>
-    
     <div class="clear"></div>
-  
-    <p />
-    
-    <div class="thumbs">
-      <a href='/'>Front page</a>
+    <div class="viewer">
+      % if ( $next > 30 ) {
+        <%= link_to Prev => "/$dir/$prev", class => 'prev' %>
+      % }
+      % if ( $next < $end ) {
+        <%= link_to Next => "/$dir/$next", class => 'next' %>
+      % }
+      <div class="clear"></div> <p />
+      <%= image $viewer_pic, id => 'view_pic' %> <p />
+      <%= link_to "Front page" => 'index', class => 'left' %>
+      <%= link_to 'Download original' => $download_pic, class => 'right', id => 'download' %>
     </div>
-    
   </body>
 </html>
 
-__END__
-
+@@ pod.html.ep
+<%= pod_to_html begin %>
 =head1 NAME
 
 gallery.pl - Mojolicious based web gallery
@@ -323,7 +315,7 @@ http://jquery.kvijayanand.in/galleriffic/
 
 =head1 DESCRIPTION
 
-Web based photo gallery using Mojolicious.  You will see at most 15 images at a time on a page and can page through the next and previous groups of 15.  When you click on a thumbnail image it will show in a larger viewing area just to the right of the thumbnails.
+Web based photo gallery using Mojolicious.  You will see at most 30 images at a time on a page and can page through the next and previous groups of 30.  When you click on a thumbnail image it will show in a larger viewing area just to the right of the thumbnails.
 
 =head1 README
 
@@ -419,3 +411,6 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 =cut
+<% end %>
+__END__
+
