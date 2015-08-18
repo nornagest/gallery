@@ -72,6 +72,7 @@ sub process_file {
   if($file =~ /(.*)\/(.*)\.(.*)/) {
     ($path, $name, $ext) = ($1, $2, $3);
   }
+  return unless grep { $3 eq $_ } values %formats;
 
   my $preview_path = $path;
   $preview_path =~ s/$base_dir\/$gallery_dir\/(.*)$/$base_dir\/$preview_dir\/$1/;
