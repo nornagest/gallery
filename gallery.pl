@@ -67,7 +67,6 @@ get '/*route' => { route => ''} => sub {
     my $thumb_path = "$thumb_dir/$route";
     my $title = 'Index';
     $title = $2 if $route =~ /^(.*\/)?(.+)$/;
-        warn "|$gallery_path|$preview_path|$thumb_path|$route|\n";
 
     my @gallery_dirs;
     if ( $#gallery_dirs <= 0 && -d "$base_dir/$gallery_path") {
