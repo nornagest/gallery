@@ -12,6 +12,7 @@ plugin 'PODRenderer' => { name => 'pod' };
 get '/pod';
 
 my $config = plugin 'Config';
+my @image_ext = ('jpg', 'png', 'gif', 'bmp');
 
 my $base_dir = $config->{base_dir};
 my $gallery_dir = $config->{gallery_dir};
@@ -22,6 +23,7 @@ my $thumb_size = $config->{thumb_size};
 my $default_permissions = $config->{default_permissions};
 my $log_dir = $config->{log_dir};
 my $log_level = $config->{log_level};
+my $log_file = $config->{log_file};
 
 # if the log directory does not exist then create it
 if ( !-d $log_dir ) {
@@ -36,77 +38,67 @@ my $log = Mojo::Log->new(
     level => $log_level
 );
 
-get '/' => sub {
-    my $self = shift;
-    my @gallery_dirs;
+sub is_image {
+    my $file = shift;
+    for my $ext (@image_ext) {
+        return 1 if lc $file =~ /\.$ext$/;
+    }
+    return undef;
+}
 
+get '/*path' => { path => ''} => sub {
+    my $c = shift;
+    my $path = $c->stash('path');
+    my $start = 0; 
+
+    ($path, $start) = ($1, $2) if $path =~ /^(.*)\/(\d+)$/;
+    $c->stash(start => $start);
+    $c->stash(path => $path);
+
+    my $gallery_path = "$gallery_dir/$path";
+    my $preview_path = "$preview_dir/$path";
+    my $thumb_path = "$thumb_dir/$path";
+    my $title = 'Index';
+    $title = $1 if $path =~ /^(.*)\/(.+)$/;
+
+    my @gallery_dirs;
     if ( $#gallery_dirs <= 0 ) {
-        opendir( my $dh, "public/" ) or $log->info("can't opendir public: $!");
+        opendir( my $dh, "$base_dir/$gallery_path" ) 
+            or $log->info("can't opendir $base_dir/$gallery_path: $!") and die $!;
         @gallery_dirs =
-          sort { $a cmp $b } grep { !/^\./ && -d "public/$_" } readdir($dh);
+          sort { $a cmp $b } 
+          map { $path ? "$path/$_" : $_ }
+          grep { !/^\./ && -d "$base_dir/$gallery_path/$_" } readdir($dh);
         closedir $dh;
     }
+    $c->stash( gal_dirs => \@gallery_dirs );
 
-    $self->stash( gal_dirs => \@gallery_dirs );
-
-    my $remote_addr = $self->tx->remote_address;
-    my $ua          = $self->req->headers->user_agent;
-    my $path        = $self->req->url->to_abs->path;
-    my $method      = $self->req->method;
-    $log->info("$remote_addr $method $path $ua");
-
-    #$self->reply->static('index.html');
-
-} => 'index';
-
-# this block does the work of building the viewing of the gallery
-# start is the first part of an array slice to view chunks of images
-# at a time rather than all on one page
-get '/:dir/:start' => { start => 0 } => sub {
-    my $self        = shift;
-    my $directory   = $self->param('dir');
-    my $slice_start = $self->param('start');
+    my $remote_addr = $c->tx->remote_address;
+    my $ua          = $c->req->headers->user_agent;
+    my $url_path        = $c->req->url->to_abs->path;
+    my $method      = $c->req->method;
+    $log->info("$remote_addr $method $url_path $ua");
 
     # how many images should be shown on a page
     # we want 30 at a time
+    my $slice_start = $start;
     my $slice_end = $slice_start + 29;
     my $prev_slice;
     my $next_slice;
-    my $title;
     my @pics;
-
-    my $remote_addr = $self->tx->remote_address;
-    my $ua          = $self->req->headers->user_agent;
-    my $path        = $self->req->url->to_abs->path;
-    my $method      = $self->req->method;
-    $log->info("$remote_addr $method $path $ua");
 
     # only build the thumbnail image array once
     if ( $#pics <= 0 ) {
-        @pics = map { s/public//r }
-          grep {
-/\.[Jj][Pp][Ee][Gg]$|\.[Jj][Pp][Gg]$|\.[Pp][Nn][Gg]$|\.[Gg][Ii][Ff]$/
-          } glob "public/$directory/thumbs/*";
+        @pics = map { s/$base_dir//r }
+          grep { is_image($_) }
+          glob "$base_dir/$thumb_path/*";
 
- # if there are no thumbnails then build the images from the directory you chose
+        # if there are no thumbnails then build the images from the directory you chose
         if ( $#pics <= 0 ) {
-            @pics = map { s/public//r }
-              grep {
-/\.[Jj][Pp][Ee][Gg]$|\.[Jj][Pp][Gg]$|\.[Pp][Nn][Gg]$|\.[Gg][Ii][Ff]$/
-              } glob "public/$directory/*";
-        }
-
-        # get the title of the gallery from the .title file
-        if ( open my $ifh, "<", "public/$directory/.title" ) {
-            while (<$ifh>) {
-                $title .= $_;
+            @pics = map { s/$base_dir//r }
+                grep { is_image($_) }
+                glob "$base_dir/$preview_path/*";
             }
-            close $ifh;
-        }
-        else {
-            $log->info("could not open (public/$directory/.title): $!");
-        }
-
     }
 
     # in order to show the next and previous page links correctly
@@ -129,49 +121,87 @@ get '/:dir/:start' => { start => 0 } => sub {
     # grab only what we need from the entire list of images
     my @send_pics = @pics[ $slice_start .. $slice_end ];
 
-    $self->stash( gallery => \@send_pics );
-    $self->stash( prev    => $prev_slice );
-    $self->stash( next    => $next_slice );
-    $self->stash( dir     => $directory );
-    $self->stash( header  => $title );
-    $self->stash( end     => $#pics );
-
-    $self->render('gallery');
-};
+    $c->stash( gallery => \@send_pics );
+    $c->stash( prev    => $prev_slice );
+    $c->stash( next    => $next_slice );
+    $c->stash( dir     => $path );
+    $c->stash( header  => $title );
+    $c->stash( end     => $#pics );
+} => 'gallery';
 
 app->start;
 
 __DATA__
 
-@@ index.html.ep
-% layout 'default';
-% title 'Welcome';
-View the following galleries
-
 @@ gallery.html.ep
-% layout 'view_gallery';
+% layout 'default';
 % title 'Welcome';
 
 @@ layouts/default.html.ep
 <!DOCTYPE html>
 <html>
+  <script>
+    function show_img(med_img, down_img) {
+      document.getElementById("view_pic").src = med_img;
+      document.getElementById("download").href = down_img;
+    }
+  </script>
+
   <head>
   <title><%= title %></title>
   </head>
   <body>
-    <%= content %>
-    <p />
-    % foreach my $dir ( @$gal_dirs ) {
-      <%= link_to $dir  => "/$dir/0" %> <br>
-    % }
-  </body>
-</html>
+    <b><%= $header %></b>
+    <p />    
 
-@@ layouts/view_gallery.html.ep
-<!DOCTYPE html>
-<html>
-  <head>
-  <title><%= title %></title>
+    <%= link_to 'Index' => '/', class => 'left' %> </br>
+    % foreach my $directory ( @$gal_dirs ) {
+      <%= link_to $directory  => "/$directory" %>
+    % }
+    <p />
+  
+    <div class="thumbs">
+      % my $counter = 0;
+      % my ($thumb_pic, $med_pic, $orig_pic, $download_pic, $viewer_pic);
+      
+      % foreach my $img ( @$gallery ) {
+        % $thumb_pic = $img;
+        % $med_pic = $thumb_pic;
+        % $med_pic =~ s/\/thumbs/previews/;
+        % $orig_pic = $thumb_pic;
+        % $orig_pic =~ s/\/thumbs/gallery/;
+
+        % if ( $counter == 0 ) {
+        %  $viewer_pic = $med_pic;
+        %  $download_pic = $orig_pic
+        % }
+
+        % my $js_code = "show_img('$med_pic','$orig_pic');return false;";
+        % my $image_link = image($img);
+        % my $link_tag = link_to('XXX' => '#', onclick => $js_code);
+        % $link_tag =~ s/XXX/$image_link/;
+        <div id='x' class='thumb'>
+          <%== $link_tag %> 
+        </div>
+        % $counter++;
+      % }
+    </div>
+     
+    <div class="clear"></div>
+    <div class="viewer">
+      % if (@$gallery) {
+         % if ( $next > 30 ) {
+           <%= link_to Prev => "/$dir/$prev", class => 'prev' %>
+         % }
+         % if ( $next < $end ) {
+           <%= link_to Next => "/$dir/$next", class => 'next' %>
+         % }
+         <div class="clear"></div> <p />
+         <%= image $viewer_pic, id => 'view_pic' %> <p />
+         <%= link_to 'Download original' => $download_pic, class => 'right', id => 'download' %>
+      % }
+    </div>
+  </body>
 
   <style type="text/css">
     .thumbs {
@@ -214,66 +244,6 @@ View the following galleries
       float: left;
     }
   </style>
-
-  <script>
-    function show_img(med_img, down_img) {
-      document.getElementById("view_pic").src = med_img;
-      document.getElementById("download").href = down_img;
-    }
-  </script>
-
-  </head>
-  <body>
-  
-    <b><%= $header %></b>
-    <p />    
-  
-    <div class="thumbs">
-      % my $counter = 0;
-      % my $show_pic;
-      % my $med_pic;
-      % my $orig_pic;
-      % my $download_pic;
-      % my $viewer_pic;
-      
-      % foreach my $img ( @$gallery ) {
-        % $show_pic = $img;
-        % $show_pic =~ s/\/thumbs//g;
-        % $show_pic =~ s/thumb_//;
-        % $med_pic = $show_pic;
-        % $orig_pic = $show_pic;
-        % $orig_pic =~ s/($dir)/$1\/originals/;
-
-        % if ( $counter == 0 ) {
-        %  $viewer_pic = $show_pic;
-        %  $download_pic = $orig_pic
-        % }
-
-        % my $js_code = "show_img('$med_pic','$orig_pic');return false;";
-        % my $image_link = image($img);
-        % my $link_tag = link_to('XXX' => '#', onclick => $js_code);
-        % $link_tag =~ s/XXX/$image_link/;
-        <div id='x' class='thumb'>
-          <%== $link_tag %> 
-        </div>
-        % $counter++;
-      % }
-    </div>
-     
-    <div class="clear"></div>
-    <div class="viewer">
-      % if ( $next > 30 ) {
-        <%= link_to Prev => "/$dir/$prev", class => 'prev' %>
-      % }
-      % if ( $next < $end ) {
-        <%= link_to Next => "/$dir/$next", class => 'next' %>
-      % }
-      <div class="clear"></div> <p />
-      <%= image $viewer_pic, id => 'view_pic' %> <p />
-      <%= link_to "Front page" => 'index', class => 'left' %>
-      <%= link_to 'Download original' => $download_pic, class => 'right', id => 'download' %>
-    </div>
-  </body>
 </html>
 
 @@ pod.html.ep
@@ -314,24 +284,23 @@ In order to successfully use this script you need to follow a standard directory
 Along side gallery.pl you need a directory called public/.  Inside public/ will be your directories of pictures.  Inside those directories will be a thumbs/ and originals/ directory.  The public/ directory is the dependency of Mojolicious when serving static files.
 
 public/
-
-    index.html - hand written html file pointing to your directories
-
-    Directory1/
-      .title - contents of file is the title of the gallery
-      image1.jpg - a medium size image
-      image2.jpg - a medium size image
-      image3.jpg - a medium size image
+    
+    gallery/
+        Directory1/
+            image1.jpg - the original image
+            image2.jpg - the original image
+            image3.jpg - the original image
+    previews/
+        Directory1/
+            image1.jpg - a medium size image
+            image2.jpg - a medium size image
+            image3.jpg - a medium size image
       
-      thumbs/
-        thumb_image1.jpg
-        thumb_image2.jpg
-        thumb_image3.jpg
-        
-      originals/
-        image1.jpg - the original image
-        image2.jpg - the original image
-        image3.jpg - the original image
+    thumbs/
+        Directory1/
+            image1.jpg - a thumbnail
+            image2.jpg - a thumbnail
+            image3.jpg - a thumbnail
 
 =head2 CONFIGURATION
 
