@@ -46,38 +46,40 @@ sub is_image {
     return undef;
 }
 
-get '/*path' => { path => ''} => sub {
+get '/*route' => { route => ''} => sub {
     my $c = shift;
-    my $path = $c->stash('path');
+
+    my $remote_addr = $c->tx->remote_address;
+    my $ua          = $c->req->headers->user_agent;
+    my $url_path    = $c->req->url->to_abs->path;
+    my $method      = $c->req->method;
+    $log->info("$remote_addr $method $url_path $ua");
+
+    my $route = $c->stash('route');
     my $start = 0; 
 
-    ($path, $start) = ($1, $2) if $path =~ /^(.*)\/(\d+)$/;
+    ($route, $start) = ($1, $2) if $route =~ /^(.*)\/(\d+)\/?$/;
+    $c->stash(route => $route);
     $c->stash(start => $start);
-    $c->stash(path => $path);
 
-    my $gallery_path = "$gallery_dir/$path";
-    my $preview_path = "$preview_dir/$path";
-    my $thumb_path = "$thumb_dir/$path";
+    my $gallery_path = "$gallery_dir/$route";
+    my $preview_path = "$preview_dir/$route";
+    my $thumb_path = "$thumb_dir/$route";
     my $title = 'Index';
-    $title = $1 if $path =~ /^(.*)\/(.+)$/;
+    $title = $2 if $route =~ /^(.*\/)?(.+)$/;
+        warn "|$gallery_path|$preview_path|$thumb_path|$route|\n";
 
     my @gallery_dirs;
-    if ( $#gallery_dirs <= 0 ) {
+    if ( $#gallery_dirs <= 0 && -d "$base_dir/$gallery_path") {
         opendir( my $dh, "$base_dir/$gallery_path" ) 
             or $log->info("can't opendir $base_dir/$gallery_path: $!") and die $!;
         @gallery_dirs =
           sort { $a cmp $b } 
-          map { $path ? "$path/$_" : $_ }
+          map { $route ? "$route/$_" : $_ }
           grep { !/^\./ && -d "$base_dir/$gallery_path/$_" } readdir($dh);
         closedir $dh;
     }
     $c->stash( gal_dirs => \@gallery_dirs );
-
-    my $remote_addr = $c->tx->remote_address;
-    my $ua          = $c->req->headers->user_agent;
-    my $url_path        = $c->req->url->to_abs->path;
-    my $method      = $c->req->method;
-    $log->info("$remote_addr $method $url_path $ua");
 
     # how many images should be shown on a page
     # we want 30 at a time
@@ -121,10 +123,10 @@ get '/*path' => { path => ''} => sub {
     # grab only what we need from the entire list of images
     my @send_pics = @pics[ $slice_start .. $slice_end ];
 
-    $c->stash( gallery => \@send_pics );
+    $c->stash( send_pics => \@send_pics );
     $c->stash( prev    => $prev_slice );
     $c->stash( next    => $next_slice );
-    $c->stash( dir     => $path );
+    $c->stash( dir     => $route );
     $c->stash( header  => $title );
     $c->stash( end     => $#pics );
 } => 'gallery';
@@ -135,7 +137,7 @@ __DATA__
 
 @@ gallery.html.ep
 % layout 'default';
-% title 'Welcome';
+% title $header;
 
 @@ layouts/default.html.ep
 <!DOCTYPE html>
@@ -163,21 +165,22 @@ __DATA__
     <div class="thumbs">
       % my $counter = 0;
       % my ($thumb_pic, $med_pic, $orig_pic, $download_pic, $viewer_pic);
-      
-      % foreach my $img ( @$gallery ) {
+
+      % foreach my $img ( @$send_pics ) {
         % $thumb_pic = $img;
         % $med_pic = $thumb_pic;
-        % $med_pic =~ s/\/thumbs/previews/;
+        % $med_pic =~ s/\/thumbs/\/previews/;
         % $orig_pic = $thumb_pic;
-        % $orig_pic =~ s/\/thumbs/gallery/;
+        % $orig_pic =~ s/\/thumbs/\/gallery/;
 
         % if ( $counter == 0 ) {
         %  $viewer_pic = $med_pic;
-        %  $download_pic = $orig_pic
+        %  $download_pic = $orig_pic;
         % }
 
         % my $js_code = "show_img('$med_pic','$orig_pic');return false;";
-        % my $image_link = image($img);
+        % my $image_link = image $thumb_pic;
+        % my $image_link = "<img src=". $thumb_pic . ">";
         % my $link_tag = link_to('XXX' => '#', onclick => $js_code);
         % $link_tag =~ s/XXX/$image_link/;
         <div id='x' class='thumb'>
@@ -189,12 +192,12 @@ __DATA__
      
     <div class="clear"></div>
     <div class="viewer">
-      % if (@$gallery) {
+      % if (@$send_pics) {
          % if ( $next > 30 ) {
-           <%= link_to Prev => "/$dir/$prev", class => 'prev' %>
+           <%= link_to 'Prev' => "/$dir/$prev", class => 'prev' %>
          % }
          % if ( $next < $end ) {
-           <%= link_to Next => "/$dir/$next", class => 'next' %>
+           <%= link_to 'Next' => "/$dir/$next", class => 'next' %>
          % }
          <div class="clear"></div> <p />
          <%= image $viewer_pic, id => 'view_pic' %> <p />

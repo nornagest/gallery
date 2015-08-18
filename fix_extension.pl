@@ -26,7 +26,7 @@ use Image::Magick;
 use File::Find;
 use File::Copy;
 
-my %formats = (JPEG => 'jpg', PNG => 'png', GIF => 'gif', BMP => 'bmp');
+my %formats = (JPEG => 'jpg', PNG => 'png', GIF => 'gif', BMP => 'bmp', PAM => 'mp4');
 
 for my $dir (@ARGV) {
     map { check_file($_) } read_dir($dir);
@@ -68,6 +68,7 @@ sub check_file {
   my ($width, $height, $size, $format) = $image->Ping($file);
   return unless $format;
   my $correct_ext = $formats{$format};
+  return unless $correct_ext;
   return if $ext eq $correct_ext;
 
   my $new_name = "$path/$name.$correct_ext";

@@ -73,18 +73,17 @@ sub process_file {
     ($path, $name, $ext) = ($1, $2, $3);
   }
 
-  print "\n$path ";
   my $preview_path = $path;
   $preview_path =~ s/$base_dir\/$gallery_dir\/(.*)$/$base_dir\/$preview_dir\/$1/;
-  print "$preview_path ";
   mkdir $preview_path, $default_permissions or die $! unless -e $preview_path && -d $preview_path ;
   my $thumb_path = $path;
   $thumb_path =~ s/$base_dir\/$gallery_dir\/(.*)$/$base_dir\/$thumb_dir\/$1/;
-  print "$thumb_path";
   mkdir $thumb_path, $default_permissions or die $! unless -e $thumb_path && -d $thumb_path;
 
   my $image = Image::Magick->new;
   my ($width, $height, $size, $format) = $image->Ping($file);
+  return unless $width && $height;
+  print "$path $preview_path $thumb_path $name.$ext\n";
 
   my $preview_file = "$preview_path/$name.$ext";
   my $thumb_file = "$thumb_path/$name.$ext";
