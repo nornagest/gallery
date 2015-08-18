@@ -23,114 +23,79 @@ use warnings;
 use utf8;
 
 use Image::Magick;
+use File::Find;
+use File::Copy;
 
-my $root                = 'public';
-my $thumbs              = 'thumbs';
-my $originals           = 'originals';
-my $title               = '.title';
-my $thumb_prefix        = 'thumb_';
+my $base_dir = 'public';
+my $gallery_dir = 'gallery';
+my $preview_dir = 'previews';
+my $thumb_dir = 'thumbs';
+my $preview_size = 600;
+my $thumb_size = 80;
 my $default_permissions = 0755;
-my @image_ext       = ( 'jpg', 'jpeg', 'png', 'gif' );
 
-my @gallery_dirs =
-  sort { $a cmp $b }
-  grep { !/^\./ && -d "$root/$_" } read_dir($root);
+my %formats = (JPEG => 'jpg', PNG => 'png', GIF => 'gif', BMP => 'bmp');
 
-for my $dir (@gallery_dirs) {
-    print "Processing $root/$dir\n";
-    my @files = check_and_create_defaults($dir);
-
-    print "Processing files...\n";
-    for my $file (@files) {
-        my $medium_file = "$root/$dir/$file";
-        my $thumb_file = "$root/$dir/$thumbs/$thumb_prefix$file";
-        my $original_file = "$root/$dir/$originals/$file";
-
-        my $image = Image::Magick->new;
-
-        $image->Read($medium_file);
-
-        #my $x = $image->Identify;
-
-        if(-e $original_file) {
-            print "$original_file exists\n";
-        } else {
-            print "Writing $original_file\n";
-            $image->Write($original_file);
-            write_medium($image, $medium_file);
-        }
-        if(-e $thumb_file) {
-            print "$thumb_file exists\n";
-        } else {
-            write_thumb($image, $thumb_file);
-        }
-    }
-}
-
-sub write_medium {
-    my ($image, $medium) = @_;
-    $image->Scale(geometry => '600x600');
-    print "Writing $medium\n";
-    $image->Write($medium);
-}
-
-sub write_thumb {
-    my ($image, $thumb) = @_;
-    $image->Scale(geometry => '80x80');
-    print "Writing $thumb\n";
-    $image->Write($thumb);
-}
+my $dir = "$base_dir/$gallery_dir";
+map { process_file($_) } read_dir($dir);
 
 sub read_dir {
-    my $dir = shift;
-    opendir( my $dh, $dir ) or die "can't opendir $dir: $!";
-    my @contents = readdir $dh;
-    closedir $dh;
-    return @contents;
+  my $dir = shift;
+  my @contents;
+
+  mkdir "$base_dir/$preview_dir", $default_permissions unless -e "$base_dir/$preview_dir";
+  mkdir "$base_dir/$thumb_dir", $default_permissions unless -e "$base_dir/$thumb_dir";
+  
+  finddepth(
+      #sub { push @contents, $File::Find::name if avoid_dots($_); }, 
+      sub { push @contents, $File::Find::name if should_process($_); }, 
+      $dir);
+  return @contents;
 }
 
-sub check_and_create_defaults {
-    my $dir   = shift;
-    my @files = read_dir("$root/$dir");
-
-    my $has_title = grep { /^$title$/ } @files;
-    if ($has_title) {
-        print "$title found\n";
-    }
-    else {
-        open( my $fh, '>', "$root/$dir/$title" ) or die "can't open $title $!";
-        print $fh $dir;
-        close $fh;
-        print "$title created\n";
-    }
-
-    my $has_thumb_dir = grep { /^$thumbs$/ && -d "$root/$dir/$thumbs" } @files;
-    if ($has_thumb_dir) {
-        print "$thumbs found\n";
-    }
-    else {
-        mkdir "$root/$dir/$thumbs", $default_permissions
-          or die "Cannot create $thumbs $!\n";
-        print "$thumbs created\n";
-    }
-    my $has_originals_dir =
-      grep { /^$originals$/ && -d "$root/$dir/$originals" } @files;
-    if ($has_originals_dir) {
-        print "$originals found\n";
-    }
-    else {
-        mkdir "$root/$dir/$originals", $default_permissions
-          or die "Cannot create $originals $!\n";
-        print "$originals created\n";
-    }
-
-    return grep { !/^\./ && -f "$root/$dir/$_" && has_image_extension($_) } @files;
+sub avoid_dots {
+  my $file = shift;
+  print "DEBUG: File: $file\n";
+  return undef if $file =~ /^\.*$/;
+  return 1;
 }
 
-sub has_image_extension {
-    my $file = shift;
-    for my $ext (@image_ext) {
-        return 1 if lc $file =~ /\.$ext$/;
-    }
-    return undef;
+#instead of avoid_dots
+sub should_process {
+  my $file = shift;
+  return -e $file && -f $file && -w $file;
+}
+
+sub process_file {
+  my $file = shift;
+  my ($path, $name, $ext);
+  if($file =~ /(.*)\/(.*)\.(.*)/) {
+    ($path, $name, $ext) = ($1, $2, $3);
+  }
+
+  print "\n$path ";
+  my $preview_path = $path;
+  $preview_path =~ s/$base_dir\/$gallery_dir\/(.*)$/$base_dir\/$preview_dir\/$1/;
+  print "$preview_path ";
+  mkdir $preview_path, $default_permissions or die $! unless -e $preview_path && -d $preview_path ;
+  my $thumb_path = $path;
+  $thumb_path =~ s/$base_dir\/$gallery_dir\/(.*)$/$base_dir\/$thumb_dir\/$1/;
+  print "$thumb_path";
+  mkdir $thumb_path, $default_permissions or die $! unless -e $thumb_path && -d $thumb_path;
+
+  my $image = Image::Magick->new;
+  my ($width, $height, $size, $format) = $image->Ping($file);
+
+  my $preview_file = "$preview_path/$name.$ext";
+  my $thumb_file = "$thumb_path/$name.$ext";
+
+  $image->Read($file);
+  if($width > $preview_size || $height > $preview_size) {
+    $image->Scale(geometry => "${preview_size}x$preview_size");
+  }
+  $image->Write($preview_file);
+  if($width > $thumb_size || $height > $thumb_size) {
+    $image->Scale(geometry => "${thumb_size}x$thumb_size");
+  }
+  $image->Write($thumb_file);
 }

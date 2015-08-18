@@ -11,24 +11,17 @@ plugin 'PODRenderer' => { name => 'pod' };
 
 get '/pod';
 
-# load a config file that contains the apps
-# configuration parameters
 my $config = plugin 'Config';
 
-# hypnotoad server configuration
-app->config(
-    hypnotoad => {
-        listen             => [ $config->{ip_address_port} ],
-        pid_file           => $config->{pid_file},
-        heartbeat_timeout  => $config->{heartbeat_timeout},
-        heartbeat_interval => $config->{heartbeat_interval},
-        inactivity_timeout => $config->{inactivity_timeout},
-        workers            => $config->{workers},
-    }
-);
-
-# location for the log to be stored
+my $base_dir = $config->{base_dir};
+my $gallery_dir = $config->{gallery_dir};
+my $preview_dir = $config->{preview_dir};
+my $thumb_dir = $config->{thumb_dir};
+my $preview_size = $config->{preview_size};
+my $thumb_size = $config->{thumb_size};
+my $default_permissions = $config->{default_permissions};
 my $log_dir = $config->{log_dir};
+my $log_level = $config->{log_level};
 
 # if the log directory does not exist then create it
 if ( !-d $log_dir ) {
@@ -39,25 +32,10 @@ if ( !-d $log_dir ) {
 # setup Mojo logging to use the log directory we just created
 # default the log level to info
 my $log = Mojo::Log->new(
-    path  => "$log_dir/$config->{log_file}",
-    level => $config->{log_level}
+    path  => "$log_dir/$log_file",
+    level => $log_level
 );
 
-# render the hand created html file in the public directory
-#get '/' => sub {
-#my $self = shift;
-
-#my $remote_addr = $self->tx->remote_address;
-#my $ua          = $self->req->headers->user_agent;
-#my $path        = $self->req->url->to_abs->path;
-#my $method      = $self->req->method;
-#$log->info("$remote_addr $method $path $ua");
-
-#$self->reply->static('index.html');
-#};
-
-# if you want to have the script auto generate the directories in public
-# then uncomment this get block and comment out the get block above
 get '/' => sub {
     my $self = shift;
     my @gallery_dirs;
@@ -279,10 +257,6 @@ View the following galleries
           <%== $link_tag %> 
         </div>
         % $counter++;
-        
-        % if ( ( $counter % 15 ) == 0 ) {
-          <div class="clear"></div>
-        % }
       % }
     </div>
      
