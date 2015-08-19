@@ -13,6 +13,7 @@ get '/pod';
 
 my $config = plugin 'Config';
 my @image_ext = ('jpg', 'png', 'gif', 'bmp');
+my $size = 30;
 
 my $base_dir = $config->{base_dir};
 my $gallery_dir = $config->{gallery_dir};
@@ -57,77 +58,53 @@ get '/*route' => { route => ''} => sub {
 
     my $route = $c->stash('route');
     my $start = 0; 
-
     ($route, $start) = ($1, $2) if $route =~ /^(.*)\/(\d+)\/?$/;
-    $c->stash(route => $route);
-    $c->stash(start => $start);
-
-    my $gallery_path = "$gallery_dir/$route";
-    my $preview_path = "$preview_dir/$route";
-    my $thumb_path = "$thumb_dir/$route";
+    my $end = $start + size -1;
+    my %dir = (
+        route => $route, 
+        thumb => "$thumb_dir/$route",
+        preview => "$preview_dir/$route",
+        gallery => "$gallery_dir/$route"
+    );
     my $title = 'Index';
     $title = $2 if $route =~ /^(.*\/)?(.+)$/;
 
-    my @gallery_dirs;
-    if ( $#gallery_dirs <= 0 && -d "$base_dir/$gallery_path") {
-        opendir( my $dh, "$base_dir/$gallery_path" ) 
-            or $log->info("can't opendir $base_dir/$gallery_path: $!") and die $!;
-        @gallery_dirs =
+    my @galleries;
+    if ( $#galleries <= 0 && -d "$base_dir/$dir{gallery}") {
+        opendir( my $dh, "$base_dir/$dir{gallery}" ) 
+            or $log->info("can't opendir $base_dir/$dir{gallery}: $!") and die $!;
+        @galleries =
           sort { $a cmp $b } 
           map { $route ? "$route/$_" : $_ }
-          grep { !/^\./ && -d "$base_dir/$gallery_path/$_" } readdir($dh);
+          grep { !/^\./ && -d "$base_dir/$dir{gallery}/$_" } readdir($dh);
         closedir $dh;
     }
-    $c->stash( gal_dirs => \@gallery_dirs );
 
-    # how many images should be shown on a page
-    # we want 30 at a time
-    my $slice_start = $start;
-    my $slice_end = $slice_start + 29;
-    my $prev_slice;
-    my $next_slice;
     my @pics;
-
     # only build the thumbnail image array once
     if ( $#pics <= 0 ) {
-        @pics = map { s/$base_dir//r }
+        @pics = 
+          map { s/$base_dir\/$dir{thumb}//r }
           grep { is_image($_) }
-          glob "$base_dir/$thumb_path/*";
-
-        # if there are no thumbnails then build the images from the directory you chose
-        if ( $#pics <= 0 ) {
-            @pics = map { s/$base_dir//r }
-                grep { is_image($_) }
-                glob "$base_dir/$preview_path/*";
-            }
+          glob "$base_dir/$dir{thumb}/*";
     }
-
-    # in order to show the next and previous page links correctly
-    # we need to know the previous slice from the current number
-    # we are on
-    $prev_slice = $slice_start - 30;
-
-    if ( $prev_slice < 0 ) {
-        $prev_slice = 0;
-    }
-
-    if ( $slice_end > $#pics ) {
-        $slice_end  = $#pics;
-        $next_slice = $#pics;
-    }
-    else {
-        $next_slice = $slice_end + 1;
-    }
+    
+    my $end = $start + $size -1;
+    $end = $#pics if $end > $#pics;
+    my $prev = $start - $size;
+    $prev = undef if $prev < 0;
+    my $next = $end + 1;
+    $next = undef if $next > $#pics;
 
     # grab only what we need from the entire list of images
-    my @send_pics = @pics[ $slice_start .. $slice_end ];
+    my @images = @pics[$start..$end];
 
-    $c->stash( send_pics => \@send_pics );
-    $c->stash( prev    => $prev_slice );
-    $c->stash( next    => $next_slice );
-    $c->stash( dir     => $route );
+    $c->stash( galleries => \@galleries );
+    $c->stash( images => \@images );
+    $c->stash( prev    => $prev );
+    $c->stash( next    => $nexte );
+    $c->stash( dir     => \%dir );
     $c->stash( header  => $title );
-    $c->stash( end     => $#pics );
 } => 'gallery';
 
 app->start;
@@ -152,36 +129,38 @@ __DATA__
   <title><%= title %></title>
   </head>
   <body>
-    <b><%= $header %></b>
-    <p />    
-
-    <%= link_to 'Index' => '/', class => 'left' %> </br>
-    % foreach my $directory ( @$gal_dirs ) {
-      <%= link_to $directory  => "/$directory" %>
-    % }
-    <p />
-  
+    <div class="header">
+        <b><%= $header %></b>
+    </div>
+    <div class="clear"></div>
+    <div class="galleries">
+        <%= link_to 'Index' => '/', class => 'left' %> </br>
+        % foreach my $directory ( @galleries ) {
+            <%= link_to $directory  => "/$directory" %>
+        % }
+    </div>
+    <div class="clear"></div>
     <div class="thumbs">
       % my $counter = 0;
-      % my ($thumb_pic, $med_pic, $orig_pic, $download_pic, $viewer_pic);
+      % my ($download, $viewer);
 
-      % foreach my $img ( @$send_pics ) {
-        % $thumb_pic = $img;
-        % $med_pic = $thumb_pic;
-        % $med_pic =~ s/\/thumbs/\/previews/;
-        % $orig_pic = $med_pic;
-        % $orig_pic =~ s/\/previews/\/gallery/;
-
-        % if ( $counter == 0 ) {
-        %  $viewer_pic = $med_pic;
-        %  $download_pic = $orig_pic;
+      % foreach my $pic ( @$pics ) {
+        % %image = ( 
+            % name => $pic, 
+            % thumb => $dir->{thumb} . '/' . $pic,
+            % preview => $dir->{preview} . '/' . $pic,
+            % gallery => $dir->{gallery} . '/' . $pic
+        % );
+        % if( !$counter ) {
+            % $viewer = $image{preview};
+            % $download = $image{gallery};
         % }
 
-        % my $js_code = "show_img('$med_pic','$orig_pic');return false;";
-        % my $image_link = image $thumb_pic;
+        % my $js_code = "show_img('" . $image{preview} . "','" . $image{gallery} . "');return false;";
+        % my $image_link = image $image{thumb};
         % my $link_tag = link_to('XXX' => '#', onclick => $js_code);
         % $link_tag =~ s/XXX/$image_link/;
-        <div id='x' class='thumb'>
+        <div class='thumb'>
           <%== $link_tag %> 
         </div>
         % $counter++;
@@ -191,15 +170,16 @@ __DATA__
     <div class="clear"></div>
     <div class="viewer">
       % if (@$send_pics) {
-         % if ( $next > 30 ) {
-           <%= link_to 'Prev' => "/$dir/$prev", class => 'prev' %>
+         % if ( $prev  ) {
+           <%= link_to 'Prev' => "/" . $dir->{route} . "/$prev", class => 'prev' %>
          % }
-         % if ( $next < $end ) {
-           <%= link_to 'Next' => "/$dir/$next", class => 'next' %>
+         % if ( $next ) {
+           <%= link_to 'Next' => "/" . $dir->{route} . "/$next", class => 'next' %>
          % }
          <div class="clear"></div> <p />
-         <%= image $viewer_pic, id => 'view_pic' %> <p />
-         <%= link_to 'Download original' => $download_pic, class => 'right', id => 'download' %>
+
+         <%= image $viewer, id => 'view_pic' %> <p />
+         <%= link_to 'Download original' => $download, class => 'right', id => 'download' %>
       % }
     </div>
   </body>
