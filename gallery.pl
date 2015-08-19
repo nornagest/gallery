@@ -59,7 +59,6 @@ get '/*route' => { route => ''} => sub {
     my $route = $c->stash('route');
     my $start = 0; 
     ($route, $start) = ($1, $2) if $route =~ /^(.*)\/(\d+)\/?$/;
-    my $end = $start + size -1;
     my %dir = (
         route => $route, 
         thumb => "$thumb_dir/$route",
