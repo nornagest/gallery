@@ -169,8 +169,8 @@ __DATA__
         % $thumb_pic = $img;
         % $med_pic = $thumb_pic;
         % $med_pic =~ s/\/thumbs/\/previews/;
-        % $orig_pic = $thumb_pic;
-        % $orig_pic =~ s/\/thumbs/\/gallery/;
+        % $orig_pic = $med_pic;
+        % $orig_pic =~ s/\/previews/\/gallery/;
 
         % if ( $counter == 0 ) {
         %  $viewer_pic = $med_pic;
@@ -179,7 +179,6 @@ __DATA__
 
         % my $js_code = "show_img('$med_pic','$orig_pic');return false;";
         % my $image_link = image $thumb_pic;
-        % my $image_link = "<img src=". $thumb_pic . ">";
         % my $link_tag = link_to('XXX' => '#', onclick => $js_code);
         % $link_tag =~ s/XXX/$image_link/;
         <div id='x' class='thumb'>
