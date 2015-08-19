@@ -48,7 +48,7 @@ sub is_image {
     return undef;
 }
 
-get '/*route' => { route => ''} => sub {
+get '/(*route)' => { route => ''} => sub {
     my $c = shift;
 
     my $remote_addr = $c->tx->remote_address;
@@ -86,7 +86,7 @@ get '/*route' => { route => ''} => sub {
     # only build the thumbnail image array once
     if ( $#pics <= 0 ) {
         @pics = 
-          map { s/$base_dir\/$dir{thumb}\///r }
+          map { s/.*\///r }
           grep { is_image($_) }
           bsd_glob("$base_dir/$dir{thumb}/*");
     }
