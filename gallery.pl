@@ -99,7 +99,7 @@ get '/*route' => { route => ''} => sub {
     my @images = @pics[$start..$end];
 
     $c->stash( galleries => \@galleries );
-    $c->stash( images => \@images );
+    $c->stash( pics => \@images );
     $c->stash( prev    => $prev );
     $c->stash( next    => $next );
     $c->stash( dir     => \%dir );
