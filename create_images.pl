@@ -47,8 +47,8 @@ sub read_dir {
   mkdir "$base_dir/$thumb_dir", $default_permissions unless -e "$base_dir/$thumb_dir";
   
   finddepth(
-      #sub { push @contents, $File::Find::name if avoid_dots($_); }, 
-      sub { push @contents, $File::Find::name if should_process($_); }, 
+      { wanted => sub { push @contents, $File::Find::name if should_process($_); },
+        follow => 1 }, 
       $dir);
   return @contents;
 }

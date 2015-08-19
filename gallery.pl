@@ -57,8 +57,9 @@ get '/*route' => { route => ''} => sub {
     $log->info("$remote_addr $method $url_path $ua");
 
     my $route = $c->stash('route');
+    $route =~ s/^(.*)\/$/$1/;
     my $start = 0; 
-    ($route, $start) = ($1, $2) if $route =~ /^(.*)\/(\d+)\/?$/;
+    ($route, $start) = ($1, $2) if $route =~ /^(.*)\/(\d+)?$/;
     my %dir = (
         route => $route, 
         thumb => "$thumb_dir/$route",
@@ -146,9 +147,9 @@ __DATA__
       % foreach my $pic ( @$pics ) {
         % my %image = ( 
             % name => $pic, 
-            % thumb => $dir->{thumb} . '/' . $pic,
-            % preview => $dir->{preview} . '/' . $pic,
-            % gallery => $dir->{gallery} . '/' . $pic
+            % thumb => '/' . $dir->{thumb} . '/' . $pic,
+            % preview => '/' . $dir->{preview} . '/' . $pic,
+            % gallery => '/' . $dir->{gallery} . '/' . $pic
         % );
         % if( !$counter ) {
             % $viewer = $image{preview};
