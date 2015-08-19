@@ -13,12 +13,12 @@ get '/pod';
 
 my $config = plugin 'Config';
 my @image_ext = ('jpg', 'png', 'gif', 'bmp');
-my $size = 30;
 
 my $base_dir = $config->{base_dir};
 my $gallery_dir = $config->{gallery_dir};
 my $preview_dir = $config->{preview_dir};
 my $thumb_dir = $config->{thumb_dir};
+my $size = $config->{gallery_size};
 my $preview_size = $config->{preview_size};
 my $thumb_size = $config->{thumb_size};
 my $default_permissions = $config->{default_permissions};
@@ -57,9 +57,9 @@ get '/*route' => { route => ''} => sub {
     $log->info("$remote_addr $method $url_path $ua");
 
     my $route = $c->stash('route');
-    $route =~ s/^(.*)\/$/$1/;
     my $start = 0; 
-    ($route, $start) = ($1, $2) if $route =~ /^(.*)\/(\d+)?$/;
+    ($route, $start) = ($1, $2) if $route =~ /^(.*)\/(\d+)$/;
+    $route =~ s/^(.*)\/$/$1/;
     my %dir = (
         route => $route, 
         thumb => "$thumb_dir/$route",
@@ -84,7 +84,7 @@ get '/*route' => { route => ''} => sub {
     # only build the thumbnail image array once
     if ( $#pics <= 0 ) {
         @pics = 
-          map { s/$base_dir\/$dir{thumb}//r }
+          map { s/$base_dir\/$dir{thumb}\///r }
           grep { is_image($_) }
           glob "$base_dir/$dir{thumb}/*";
     }
@@ -95,6 +95,12 @@ get '/*route' => { route => ''} => sub {
     $prev = undef if $prev < 0;
     my $next = $end + 1;
     $next = undef if $next > $#pics;
+
+    if($size == -1) {
+        $end = $#pics; 
+        $prev = undef; 
+        $next = undef;
+    }
 
     # grab only what we need from the entire list of images
     my @images = @pics[$start..$end];
@@ -136,7 +142,7 @@ __DATA__
     <div class="galleries">
         <%= link_to 'Index' => '/', class => 'left' %> </br>
         % foreach my $directory ( @$galleries ) {
-            <%= link_to $directory  => "/$directory" %>
+            <%= link_to $directory  => "/$directory/" %>
         % }
     </div>
     <div class="clear"></div>
