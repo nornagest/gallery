@@ -144,7 +144,7 @@ __DATA__
       % my ($download, $viewer);
 
       % foreach my $pic ( @$pics ) {
-        % %image = ( 
+        % my %image = ( 
             % name => $pic, 
             % thumb => $dir->{thumb} . '/' . $pic,
             % preview => $dir->{preview} . '/' . $pic,
