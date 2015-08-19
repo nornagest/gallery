@@ -68,7 +68,8 @@ get '/*route' => { route => ''} => sub {
         gallery => "$gallery_dir/$route"
     );
     my $title = 'Index';
-    $title = $2 if $route =~ /^(.*\/)?(.+)$/;
+    # $2 contains last part of path
+    $title = $route if $route =~ /^(.*\/)?(.+)$/;
 
     my @galleries;
     if ( $#galleries <= 0 && -d "$base_dir/$dir{gallery}") {
@@ -143,7 +144,8 @@ __DATA__
     <div class="galleries">
         <%= link_to 'Index' => '/', class => 'left' %> </br>
         % foreach my $directory ( @$galleries ) {
-            <%= link_to $directory  => "/$directory/" %>
+            % my $link_name = $directory =~ /^(.*\/)?(.+)$/ ? $2 : $directory;
+            <%= link_to $link_name => "/$directory/" %>
         % }
     </div>
     <div class="clear"></div>
