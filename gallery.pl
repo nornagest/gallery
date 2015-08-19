@@ -168,7 +168,7 @@ __DATA__
      
     <div class="clear"></div>
     <div class="viewer">
-      % if (@$send_pics) {
+      % if (@$pics) {
          % if ( $prev  ) {
            <%= link_to 'Prev' => "/" . $dir->{route} . "/$prev", class => 'prev' %>
          % }
