@@ -13,19 +13,19 @@ plugin 'PODRenderer' => { name => 'pod' };
 get '/pod';
 
 my $config = plugin 'Config';
-my @image_ext = ('jpg', 'png', 'gif', 'bmp');
+my @image_ext = ( 'jpg', 'png', 'gif', 'bmp' );
 
-my $base_dir = $config->{base_dir};
-my $gallery_dir = $config->{gallery_dir};
-my $preview_dir = $config->{preview_dir};
-my $thumb_dir = $config->{thumb_dir};
-my $size = $config->{gallery_size};
-my $preview_size = $config->{preview_size};
-my $thumb_size = $config->{thumb_size};
+my $base_dir            = $config->{base_dir};
+my $gallery_dir         = $config->{gallery_dir};
+my $preview_dir         = $config->{preview_dir};
+my $thumb_dir           = $config->{thumb_dir};
+my $size                = $config->{gallery_size};
+my $preview_size        = $config->{preview_size};
+my $thumb_size          = $config->{thumb_size};
 my $default_permissions = $config->{default_permissions};
-my $log_dir = $config->{log_dir};
-my $log_level = $config->{log_level};
-my $log_file = $config->{log_file};
+my $log_dir             = $config->{log_dir};
+my $log_level           = $config->{log_level};
+my $log_file            = $config->{log_file};
 
 # if the log directory does not exist then create it
 if ( !-d $log_dir ) {
@@ -48,7 +48,7 @@ sub is_image {
     return undef;
 }
 
-get '/(*route)' => { route => ''} => sub {
+get '/(*route)' => { route => '' } => sub {
     my $c = shift;
 
     my $remote_addr = $c->tx->remote_address;
@@ -58,61 +58,63 @@ get '/(*route)' => { route => ''} => sub {
     $log->info("$remote_addr $method $url_path $ua");
 
     my $route = $c->stash('route');
-    my $start = 0; 
-    ($route, $start) = ($1, $2) if $route =~ /^(.*)\/(\d+)$/;
+    my $start = 0;
+    ( $route, $start ) = ( $1, $2 ) if $route =~ /^(.*)\/(\d+)$/;
     $route =~ s/^(.*)\/$/$1/;
     my %dir = (
-        route => $route, 
-        thumb => "$thumb_dir/$route",
+        route   => $route,
+        thumb   => "$thumb_dir/$route",
         preview => "$preview_dir/$route",
         gallery => "$gallery_dir/$route"
     );
     my $title = 'Index';
+
     # $2 contains last part of path
     $title = $route if $route =~ /^(.*\/)?(.+)$/;
 
     my @galleries;
-    if ( $#galleries <= 0 && -d "$base_dir/$dir{gallery}") {
-        opendir( my $dh, "$base_dir/$dir{gallery}" ) 
-            or $log->info("can't opendir $base_dir/$dir{gallery}: $!") and die $!;
+    if ( $#galleries <= 0 && -d "$base_dir/$dir{gallery}" ) {
+        opendir( my $dh, "$base_dir/$dir{gallery}" )
+          or $log->info("can't opendir $base_dir/$dir{gallery}: $!")
+          and die $!;
         @galleries =
-          sort { $a cmp $b } 
+          sort { $a cmp $b }
           map { $route ? "$route/$_" : $_ }
           grep { !/^\./ && -d "$base_dir/$dir{gallery}/$_" } readdir($dh);
         closedir $dh;
     }
 
     my @pics;
+
     # only build the thumbnail image array once
     if ( $#pics <= 0 ) {
-        @pics = 
-          map { s/.*\///r }
-          grep { is_image($_) }
-          bsd_glob("$base_dir/$dir{thumb}/*");
+        @pics =
+          map  { s/.*\///r }
+          grep { is_image($_) } bsd_glob("$base_dir/$dir{thumb}/*");
     }
-    
-    my $end = $start + $size -1;
+
+    my $end = $start + $size - 1;
     $end = $#pics if $end > $#pics;
     my $prev = $start - $size;
     $prev = undef if $prev < 0;
     my $next = $end + 1;
     $next = undef if $next > $#pics;
 
-    if($size == -1) {
-        $end = $#pics; 
-        $prev = undef; 
+    if ( $size == -1 ) {
+        $end  = $#pics;
+        $prev = undef;
         $next = undef;
     }
 
     # grab only what we need from the entire list of images
-    my @images = @pics[$start..$end];
+    my @images = @pics[ $start .. $end ];
 
     $c->stash( galleries => \@galleries );
-    $c->stash( pics => \@images );
-    $c->stash( prev    => $prev );
-    $c->stash( next    => $next );
-    $c->stash( dir     => \%dir );
-    $c->stash( header  => $title );
+    $c->stash( pics      => \@images );
+    $c->stash( prev      => $prev );
+    $c->stash( next      => $next );
+    $c->stash( dir       => \%dir );
+    $c->stash( header    => $title );
 } => 'gallery';
 
 app->start;
@@ -179,10 +181,10 @@ __DATA__
     <div class="clear"></div>
     <div class="viewer">
       % if (@$pics) {
-         % if ( $prev  ) {
+         % if ( defined $prev  ) {
            <%= link_to 'Prev' => "/" . $dir->{route} . "/$prev", class => 'prev' %>
          % }
-         % if ( $next ) {
+         % if ( defined $next ) {
            <%= link_to 'Next' => "/" . $dir->{route} . "/$next", class => 'next' %>
          % }
          <div class="clear"></div> <p />
