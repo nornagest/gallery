@@ -102,7 +102,7 @@ get '/*route' => { route => ''} => sub {
     $c->stash( galleries => \@galleries );
     $c->stash( images => \@images );
     $c->stash( prev    => $prev );
-    $c->stash( next    => $nexte );
+    $c->stash( next    => $next );
     $c->stash( dir     => \%dir );
     $c->stash( header  => $title );
 } => 'gallery';
