@@ -3,6 +3,7 @@ use strict;
 use warnings;
 use Mojolicious::Lite;
 use Mojo::Log;
+use File::Glob ':bsd_glob';
 
 our $VERSION = "1.2";
 
@@ -86,7 +87,7 @@ get '/*route' => { route => ''} => sub {
         @pics = 
           map { s/$base_dir\/$dir{thumb}\///r }
           grep { is_image($_) }
-          glob "$base_dir/$dir{thumb}/*";
+          bsd_glob("$base_dir/$dir{thumb}/*");
     }
     
     my $end = $start + $size -1;
