@@ -134,7 +134,7 @@ __DATA__
     <div class="clear"></div>
     <div class="galleries">
         <%= link_to 'Index' => '/', class => 'left' %> </br>
-        % foreach my $directory ( @galleries ) {
+        % foreach my $directory ( @$galleries ) {
             <%= link_to $directory  => "/$directory" %>
         % }
     </div>
